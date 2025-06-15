@@ -110,9 +110,8 @@ async def show_services(message: types.Message):
 async def show_portfolio(message: types.Message):
     await message.answer(
         "📂 <b>Мои работы:</b>\n\n"
-        "🔗 GitHub: github.com/your_profile\n"
+        "🔗 GitHub: https://github.com/JustProject174/JustProject_174.git\n"
         "📹 Видео-демо: youtu.be/demo\n"
-        "💼 LinkedIn: linkedin.com/in/yourprofile\n\n"
         "🏆 <b>Выполненные проекты:</b>\n"
         "• 50+ ботов для автоматизации\n"
         "• 30+ парсеров данных\n"
