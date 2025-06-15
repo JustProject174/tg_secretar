@@ -541,7 +541,7 @@ async def main():
 
     try:
         if WEBHOOK_URL:
-             logger.info("🌐 Режим работы: Webhook")
+            logger.info("🌐 Режим работы: Webhook")
             await setup_webhook()
             
             # Создаем aiohttp приложение
