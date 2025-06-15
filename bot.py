@@ -185,7 +185,7 @@ async def process_order(callback: types.CallbackQuery):
         "order_parse": ("Парсинг данных", 3000, "📊"),
         "order_excel": ("Автоматизация Excel", 1000, "📋"),
         "order_bot": ("Разработка бота", 8000, "🤖"),
-        "order_consultation": ("Консультация", 0, "💬")
+        "order_consultation": ("Консультация", 1, "💬")
     }
 
     if callback.data not in service_map:
