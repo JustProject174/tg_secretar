@@ -26,20 +26,17 @@ if not TOKEN:
 if not GSHEETS_URL:
     raise ValueError('GSHEETS_URL не установлен в переменных окружения')
 
-# Инициализация
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Настройка логирования
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# ========================
-# ГЛАВНОЕ МЕНЮ
-# ========================
+
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📊 Услуги")],
@@ -52,9 +49,7 @@ main_menu = ReplyKeyboardMarkup(
 )
 
 
-# ========================
-# ОБРАБОТЧИКИ КОМАНД
-# ========================
+
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -89,9 +84,7 @@ async def status_command(message: types.Message):
     )
 
 
-# ========================
-# ОБРАБОТЧИКИ КНОПОК
-# ========================
+
 @dp.message(F.text == "📊 Услуги")
 async def show_services(message: types.Message):
     await message.answer(
@@ -147,9 +140,6 @@ async def show_contacts(message: types.Message):
     )
 
 
-# ========================
-# СИСТЕМА ЗАКАЗОВ
-# ========================
 @dp.message(F.text == "🛒 Заказать")
 async def start_order(message: types.Message):
     inline_kb = InlineKeyboardMarkup(
@@ -194,7 +184,6 @@ async def process_order(callback: types.CallbackQuery):
 
     service, price, emoji = service_map[callback.data]
 
-    # Подготавливаем данные для отправки
     order_data = {
         "client_name": callback.from_user.full_name or "Не указано",
         "client_id": str(callback.from_user.id),
@@ -207,7 +196,6 @@ async def process_order(callback: types.CallbackQuery):
 
     logger.info(f"Обработка заказа: {service} для пользователя {callback.from_user.id}")
 
-    # Сохраняем в Google Sheets
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -270,9 +258,7 @@ async def process_order(callback: types.CallbackQuery):
         )
 
 
-# ========================
-# ОБРАБОТКА НЕИЗВЕСТНЫХ СООБЩЕНИЙ
-# ========================
+
 @dp.message()
 async def handle_unknown_message(message: types.Message):
     await message.answer(
@@ -283,9 +269,7 @@ async def handle_unknown_message(message: types.Message):
     )
 
 
-# ========================
-# WEBHOOK ОБРАБОТЧИК
-# ========================
+
 async def webhook_handler(request: Request):
     """Обработчик webhook от Telegram"""
     try:
@@ -299,27 +283,23 @@ async def webhook_handler(request: Request):
 
 
 async def health_check(request: Request):
-    """Проверка здоровья приложения"""
+    """Проверка состояния приложения"""
     return web.Response(text="Bot is running!", content_type="text/plain")
 
 
-# ========================
-# НАСТРОЙКА WEBHOOK
-# ========================
 async def setup_webhook():
     """Настройка webhook для Heroku"""
     try:
         webhook_url = f"{WEBHOOK_URL}/webhook"
 
-        # Удаляем старый webhook
+
         await bot.delete_webhook(drop_pending_updates=True)
 
-        # Устанавливаем новый webhook
+
         await bot.set_webhook(webhook_url)
 
         logger.info(f"✅ Webhook установлен: {webhook_url}")
 
-        # Проверяем статус webhook
         webhook_info = await bot.get_webhook_info()
         logger.info(f"📊 Статус webhook: {webhook_info}")
 
@@ -328,9 +308,7 @@ async def setup_webhook():
         raise
 
 
-# ========================
-# ОБРАБОТКА ОШИБОК
-# ========================
+
 @dp.error()
 async def error_handler(event: types.ErrorEvent):
     logger.error(f"Критическая ошибка: {event.exception}", exc_info=True)
@@ -357,26 +335,22 @@ async def error_handler(event: types.ErrorEvent):
             pass
 
 
-# ========================
-# ГЛАВНАЯ ФУНКЦИЯ
-# ========================
+
 async def main():
     logger.info("🚀 Запуск Telegram-бота на Heroku...")
 
     try:
         if WEBHOOK_URL:
-            # Режим webhook для продакшена (Heroku)
+        
             logger.info("🌐 Запуск в режиме webhook")
 
             await setup_webhook()
 
-            # Создаем веб-приложение
             app = web.Application()
             app.router.add_post('/webhook', webhook_handler)
             app.router.add_get('/health', health_check)
             app.router.add_get('/', health_check)  # Для проверки Heroku
 
-            # Запускаем сервер
             runner = web.AppRunner(app)
             await runner.setup()
 
@@ -386,9 +360,8 @@ async def main():
             logger.info(f"✅ Webhook сервер запущен на порту {PORT}")
             logger.info(f"🔗 Health check: {WEBHOOK_URL}/health")
 
-            # Держим приложение запущенным
             while True:
-                await asyncio.sleep(3600)  # Проверяем каждый час
+                await asyncio.sleep(740)  # Проверяем каждый час
 
         else:
             # Режим polling для разработки
