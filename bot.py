@@ -519,7 +519,7 @@ async def error_handler(event: types.ErrorEvent):
     if hasattr(event, 'update') and event.update.callback_query:
         try:
             await event.update.callback_query.answer(
-                "⚠ Произошла техническая ошибка. Попробуйте позже.",
+                "⚠️ Произошла техническая ошибка. Попробуйте позже.",
                 show_alert=True
             )
         except Exception:
@@ -536,12 +536,53 @@ async def error_handler(event: types.ErrorEvent):
             pass
 
 async def main():
+    """Главная функция запуска бота"""
     logger.info("🚀 Запуск Telegram-бота на Heroku с keep-alive системой...")
 
     try:
         if WEBHOOK_URL:
-            logger.info("🌐 Запуск в режиме webhook")
+             logger.info("🌐 Режим работы: Webhook")
             await setup_webhook()
+            
+            # Создаем aiohttp приложение
+            app = web.Application()
+            app.router.add_post('/webhook', webhook_handler)
+            app.router.add_get('/health', health_check)
+            
+            # Запускаем keep-alive систему в фоне
+            asyncio.create_task(keep_alive.start_keep_alive())
+            
+            # Настраиваем runner
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, '0.0.0.0', PORT)
+            
+            logger.info(f"🖥 Сервер запущен на порту {PORT}")
+            await site.start()
+            
+            # Бесконечный цикл для поддержания работы
+            while True:
+                await asyncio.sleep(3600)  # 1 час
+        else:
+            logger.info("💻 Режим работы: Polling")
+            await bot.delete_webhook(drop_pending_updates=True)
+            
+            # Запускаем keep-alive систему в фоне (для локального тестирования)
+            asyncio.create_task(keep_alive.start_keep_alive())
+            
+            await dp.start_polling(bot)
+            
+    except Exception as e:
+        logger.critical(f"❌ Критическая ошибка при запуске: {e}", exc_info=True)
+    finally:
+        keep_alive.stop()
+        await bot.session.close()
+        logger.info("🛑 Бот остановлен")
 
-            # Запуск keep-alive системы в фоне
-            asyncio.create_task
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Принудительная остановка бота")
+    except Exception as e:
+        logger.critical(f"❌ Необработанное исключение: {e}", exc_info=True)
