@@ -428,8 +428,7 @@ async def understanding_message(message: types.Message):
     )
 
 # Общий обработчик для вопросительных предложений
-@dp.message(F.text.lower().regexp(r'.*\?
-))
+@dp.message(F.text.lower().regexp(r'.*\?$'))
 async def question_fallback(message: types.Message):
     await message.answer(
         "🤔 <b>У вас есть вопрос?</b>\n\n"
