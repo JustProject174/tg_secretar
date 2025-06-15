@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import aiohttp
+from datetime import datetime
 from aiohttp import web
 from aiohttp.web import Request
 from aiogram import Bot, Dispatcher, types, F
@@ -31,6 +32,48 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Keep-alive система
+class KeepAliveSystem:
+    def __init__(self):
+        self.ping_count = 0
+        self.is_running = True
+    
+    async def start_keep_alive(self):
+        """Запуск системы поддержания активности"""
+        logger.info("🔄 Запуск keep-alive системы")
+        
+        while self.is_running:
+            try:
+                await asyncio.sleep(600)  # 10 минут
+                await self.perform_ping()
+            except Exception as e:
+                logger.error(f"❌ Ошибка keep-alive: {e}")
+    
+    async def perform_ping(self):
+        """Выполнение пинга для поддержания активности"""
+        self.ping_count += 1
+        current_time = datetime.now()
+        
+        try:
+            if WEBHOOK_URL:
+                url = f"{WEBHOOK_URL}/health"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=30) as response:
+                        logger.info(f"🏓 Keep-alive ping #{self.ping_count}: {response.status} в {current_time.strftime('%H:%M:%S')}")
+            else:
+                logger.info(f"🏓 Keep-alive ping #{self.ping_count} в {current_time.strftime('%H:%M:%S')} (локальный режим)")
+                
+        except Exception as e:
+            logger.error(f"❌ Ping failed: {e}")
+    
+    def stop(self):
+        """Остановка keep-alive системы"""
+        self.is_running = False
+        logger.info("🛑 Keep-alive система остановлена")
+
+# Глобальный экземпляр keep-alive
+keep_alive = KeepAliveSystem()
 
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
@@ -66,11 +109,13 @@ async def help_command(message: types.Message):
 @dp.message(Command("status"))
 async def status_command(message: types.Message):
     await message.answer(
-        "✅ <b>Статус бота:</b>\n\n"
-        "🌐 Сервер: Heroku\n"
-        "🔄 Режим: Webhook\n"
-        "📊 Состояние: Активен\n"
-        "🕐 Время работы: 24/7",
+        f"✅ <b>Статус бота:</b>\n\n"
+        f"🌐 Сервер: Heroku\n"
+        f"🔄 Режим: Webhook\n"
+        f"📊 Состояние: Активен\n"
+        f"🕐 Время работы: 24/7\n"
+        f"🏓 Keep-alive пингов: {keep_alive.ping_count}\n"
+        f"⏰ Текущее время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
         parse_mode="HTML"
     )
 
@@ -193,7 +238,7 @@ async def process_order(callback: types.CallbackQuery):
                 response_text = await response.text()
                 logger.info(f"Google Sheets ответ: {response.status} - {response_text}")
 
-                if response.status in [200, 302]:  # 302 - нормальный редирект для GAS
+                if response.status in [200, 302]:
                     await callback.answer("✅ Заказ успешно оформлен!", show_alert=False)
 
                     price_text = f"от {price:,}₽" if price > 0 else "Бесплатно"
@@ -447,8 +492,12 @@ async def webhook_handler(request: Request):
         return web.Response(status=500, text="Error")
 
 async def health_check(request: Request):
-    """Проверка состояния приложения"""
-    return web.Response(text="Bot is running!", content_type="text/plain")
+    """Проверка состояния приложения с keep-alive информацией"""
+    current_time = datetime.now()
+    uptime_info = f"Bot is running! Time: {current_time.strftime('%d.%m.%Y %H:%M:%S')}, Keep-alive pings: {keep_alive.ping_count}"
+    
+    logger.info(f"🏥 Health check: {uptime_info}")
+    return web.Response(text=uptime_info, content_type="text/plain")
 
 async def setup_webhook():
     """Настройка webhook для Heroku"""
@@ -487,45 +536,15 @@ async def error_handler(event: types.ErrorEvent):
             pass
 
 async def main():
-    logger.info("🚀 Запуск Telegram-бота на Heroku...")
+    logger.info("🚀 Запуск Telegram-бота на Heroku с keep-alive системой...")
 
     try:
         if WEBHOOK_URL:
             logger.info("🌐 Запуск в режиме webhook")
             await setup_webhook()
 
-            app = web.Application()
-            app.router.add_post('/webhook', webhook_handler)
-            app.router.add_get('/health', health_check)
-            app.router.add_get('/', health_check)
+            # Запуск keep-alive системы в фоне
+            asyncio.create_task(keep_alive.start_keep_alive())
+            logger.info("🔄 Keep-alive система запущена")
 
-            runner = web.AppRunner(app)
-            await runner.setup()
-
-            site = web.TCPSite(runner, '0.0.0.0', PORT)
-            await site.start()
-
-            logger.info(f"✅ Webhook сервер запущен на порту {PORT}")
-            logger.info(f"🔗 Health check: {WEBHOOK_URL}/health")
-
-            while True:
-                await asyncio.sleep(3600)
-
-        else:
-            logger.info("🔄 Запуск в режиме polling (разработка)")
-            await bot.delete_webhook(drop_pending_updates=True)
-            await dp.start_polling(bot, skip_updates=True)
-
-    except Exception as e:
-        logger.error(f"❌ Критическая ошибка запуска: {e}", exc_info=True)
-        raise
-    finally:
-        await bot.session.close()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("🛑 Бот остановлен пользователем")
-    except Exception as e:
-        logger.error(f"💥 Критическая ошибка: {e}", exc_info=True)
+            app = web.
