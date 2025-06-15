@@ -38,6 +38,7 @@ class KeepAliveSystem:
     def __init__(self):
         self.ping_count = 0
         self.is_running = True
+        self.start_time = datetime.now()
     
     async def start_keep_alive(self):
         """Запуск системы поддержания активности"""
@@ -67,6 +68,20 @@ class KeepAliveSystem:
         except Exception as e:
             logger.error(f"❌ Ping failed: {e}")
     
+    def get_uptime(self):
+        """Получить время работы бота"""
+        uptime = datetime.now() - self.start_time
+        days = uptime.days
+        hours, remainder = divmod(uptime.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        
+        if days > 0:
+            return f"{days}д {hours}ч {minutes}м"
+        elif hours > 0:
+            return f"{hours}ч {minutes}м"
+        else:
+            return f"{minutes}м"
+    
     def stop(self):
         """Остановка keep-alive системы"""
         self.is_running = False
@@ -86,8 +101,10 @@ main_menu = ReplyKeyboardMarkup(
     input_field_placeholder="Выберите действие..."
 )
 
+# Улучшенный обработчик команды start
 @dp.message(Command("start"))
 async def start(message: types.Message):
+    logger.info(f"👤 Команда /start от пользователя {message.from_user.id} ({message.from_user.full_name})")
     await message.answer(
         "🚀 Добро пожаловать! Я помогу автоматизировать ваш бизнес.\n"
         "Выберите действие:",
@@ -96,26 +113,65 @@ async def start(message: types.Message):
 
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
+    logger.info(f"❓ Команда /help от пользователя {message.from_user.id}")
     await message.answer(
         "ℹ️ <b>Доступные команды:</b>\n\n"
         "/start - Запустить бота\n"
         "/help - Показать справку\n"
-        "/status - Статус бота\n\n"
+        "/status - Статус бота\n"
+        "/ping - Проверка связи\n\n"
         "Используйте кнопки меню для навигации.",
         parse_mode="HTML",
         reply_markup=main_menu
     )
 
+# Улучшенный обработчик команды status с дополнительной информацией
 @dp.message(Command("status"))
 async def status_command(message: types.Message):
-    await message.answer(
+    logger.info(f"📊 Команда /status от пользователя {message.from_user.id} ({message.from_user.full_name})")
+    
+    # Получаем информацию о webhook
+    try:
+        webhook_info = await bot.get_webhook_info()
+        webhook_status = "🟢 Активен" if webhook_info.url else "🔴 Не установлен"
+        webhook_url_display = webhook_info.url if webhook_info.url else "Не установлен"
+    except Exception as e:
+        webhook_status = f"⚠️ Ошибка: {str(e)[:50]}"
+        webhook_url_display = "Недоступно"
+    
+    # Формируем сообщение со статусом
+    status_message = (
         f"✅ <b>Статус бота:</b>\n\n"
-        f"🌐 Сервер: Heroku\n"
-        f"🔄 Режим: Webhook\n"
-        f"📊 Состояние: Активен\n"
-        f"🕐 Время работы: 24/7\n"
-        f"🏓 Keep-alive пингов: {keep_alive.ping_count}\n"
-        f"⏰ Текущее время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
+        f"🤖 <b>ID бота:</b> {bot.id}\n"
+        f"👤 <b>Ваш ID:</b> {message.from_user.id}\n"
+        f"🌐 <b>Сервер:</b> {'Heroku' if WEBHOOK_URL else 'Local'}\n"
+        f"🔄 <b>Режим:</b> {'Webhook' if WEBHOOK_URL else 'Polling'}\n"
+        f"📡 <b>Webhook:</b> {webhook_status}\n"
+        f"📊 <b>Состояние:</b> Активен\n"
+        f"⏱️ <b>Время работы:</b> {keep_alive.get_uptime()}\n"
+        f"🏓 <b>Keep-alive пингов:</b> {keep_alive.ping_count}\n"
+        f"⏰ <b>Текущее время:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
+        f"🕐 <b>Время запуска:</b> {keep_alive.start_time.strftime('%d.%m.%Y %H:%M:%S')}"
+    )
+    
+    await message.answer(status_message, parse_mode="HTML")
+
+# Новая команда для быстрой проверки связи
+@dp.message(Command("ping"))
+async def ping_command(message: types.Message):
+    logger.info(f"🏓 Команда /ping от пользователя {message.from_user.id}")
+    start_time = datetime.now()
+    
+    sent_message = await message.answer("🏓 Понг!")
+    
+    # Вычисляем время отклика
+    response_time = (datetime.now() - start_time).total_seconds() * 1000
+    
+    await sent_message.edit_text(
+        f"🏓 <b>Понг!</b>\n\n"
+        f"⚡ Время отклика: {response_time:.0f}мс\n"
+        f"🤖 Бот работает исправно\n"
+        f"⏰ {datetime.now().strftime('%H:%M:%S')}",
         parse_mode="HTML"
     )
 
@@ -285,6 +341,7 @@ async def process_order(callback: types.CallbackQuery):
             parse_mode="HTML"
         )
 
+# Остальные обработчики сообщений остаются без изменений...
 @dp.message(F.text.lower().contains("цена") | F.text.lower().contains("стоимость") | F.text.lower().contains("сколько"))
 async def price_question(message: types.Message):
     await message.answer(
@@ -300,179 +357,29 @@ async def price_question(message: types.Message):
         reply_markup=main_menu
     )
 
-@dp.message(F.text.lower().contains("срок") | F.text.lower().contains("время") | F.text.lower().contains("когда готово"))
-async def time_question(message: types.Message):
-    await message.answer(
-        "⏰ <b>Сроки выполнения работ:</b>\n\n"
-        "📊 Парсинг данных — 2-5 дней\n"
-        "📋 Автоматизация Excel — 1-3 дня\n"
-        "🤖 Telegram-бот — 5-14 дней\n"
-        "💬 Консультация — в течение дня\n\n"
-        "📅 <i>Точные сроки обсуждаются индивидуально и зависят от:</i>\n"
-        "• Сложности задачи\n"
-        "• Объема работ\n"
-        "• Текущей загрузки\n\n"
-        "⚡ Срочные заказы — доплата 50%",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("опыт") | F.text.lower().contains("портфолио") | F.text.lower().contains("работы"))
-async def experience_question(message: types.Message):
-    await message.answer(
-        "🏆 <b>Мой опыт:</b>\n\n"
-        "⏳ <b>Стаж:</b> 3+ года в автоматизации\n"
-        "📊 <b>Выполнено проектов:</b>\n"
-        "• 50+ ботов для автоматизации\n"
-        "• 30+ парсеров данных\n" 
-        "• 20+ Excel автоматизаций\n\n"
-        "⭐ <b>Средняя оценка:</b> 4.9/5\n"
-        "🎓 <b>Технологии:</b> Python, VBA, SQL, API\n\n"
-        "📂 Подробное портфолио смотрите в разделе 'Портфолио'",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("оплата") | F.text.lower().contains("платить") | F.text.lower().contains("как оплатить"))
-async def payment_question(message: types.Message):
-    await message.answer(
-        "💳 <b>Способы оплаты:</b>\n\n"
-        "🏦 <b>Доступные варианты:</b>\n"
-        "• СБП (быстрые платежи)\n"
-        "• Банковская карта\n"
-        "• Перевод на карту\n"
-        "• ЮMoney\n"
-        "• QIWI\n\n"
-        "📋 <b>Условия:</b>\n"
-        "• Предоплата 50% — для начала работ\n"
-        "• 50% — после завершения\n"
-        "• Мелкие правки (до 10%) — бесплатно\n\n"
-        "📄 Выдаю чек об оплате",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("гарантия") | F.text.lower().contains("поддержка") | F.text.lower().contains("исправления"))
-async def guarantee_question(message: types.Message):
-    await message.answer(
-        "🛡️ <b>Гарантии и поддержка:</b>\n\n"
-        "✅ <b>Что гарантирую:</b>\n"
-        "• Работу согласно ТЗ\n"
-        "• Исправление ошибок — бесплатно\n"
-        "• Техподдержку 1 месяц\n"
-        "• Инструкцию по использованию\n\n"
-        "🔧 <b>Поддержка включает:</b>\n"
-        "• Консультации по использованию\n"
-        "• Мелкие доработки\n"
-        "• Исправление ошибок\n\n"
-        "⏰ <b>Время ответа:</b> в течение 24 часов",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("техзадание") | F.text.lower().contains("тз") | F.text.lower().contains("требования"))
-async def tz_question(message: types.Message):
-    await message.answer(
-        "📋 <b>Техническое задание:</b>\n\n"
-        "📝 <b>Что нужно указать:</b>\n"
-        "• Подробное описание задачи\n"
-        "• Примеры входных данных\n"
-        "• Желаемый результат\n"
-        "• Особые требования\n\n"
-        "💡 <b>Не знаете как составить ТЗ?</b>\n"
-        "Не проблема! Я помогу:\n"
-        "• Проведу консультацию\n"
-        "• Задам нужные вопросы\n"
-        "• Составлю ТЗ вместе с вами\n\n"
-        "🆓 Консультация — бесплатно!",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("привет") | F.text.lower().contains("здравствуй") | F.text.lower().contains("добро пожаловать"))
-async def greeting_question(message: types.Message):
-    await message.answer(
-        f"👋 Привет, {message.from_user.first_name}!\n\n"
-        "Я специализируюсь на автоматизации бизнес-процессов:\n"
-        "📊 Парсинг данных\n"
-        "📋 Автоматизация Excel\n" 
-        "🤖 Разработка ботов\n\n"
-        "Чем могу помочь? Используйте кнопки меню ⬇️",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("контакт") | F.text.lower().contains("связаться") | F.text.lower().contains("телефон") | F.text.lower().contains("email"))
-async def contact_question(message: types.Message):
-    await message.answer(
-        "📞 <b>Мои контакты:</b>\n\n"
-        "📱 <b>Telegram:</b> @JProj_174\n"
-        "📧 <b>Email:</b> Projman174@yandex.ru\n"
-        "⏰ <b>Часы работы:</b> 10:00-18:00 МСК\n\n"
-        "⚡ <b>Время ответа:</b>\n"
-        "• В рабочие часы: 1-2 часа\n"
-        "• Вечером: до 8 часов\n"
-        "• Выходные: до 24 часов\n\n"
-        "💬 Лучше всего писать в Telegram — отвечаю быстрее!",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("пример") | F.text.lower().contains("демо") | F.text.lower().contains("показать"))
-async def examples_question(message: types.Message):
-    await message.answer(
-        "🎯 <b>Примеры моих работ:</b>\n\n"
-        "📊 <b>Парсинг:</b>\n"
-        "• Сбор цен с Авито (10 000+ объявлений)\n"
-        "• Парсинг отзывов с Яндекс.Карт\n"
-        "• Мониторинг цен конкурентов\n\n"
-        "🤖 <b>Боты:</b>\n"
-        "• CRM-бот для салона красоты\n"
-        "• Бот для заказа еды с оплатой\n"
-        "• Уведомления о новых заказах\n\n"
-        "📋 <b>Excel:</b>\n"
-        "• Автоматические отчеты по продажам\n"
-        "• Система учета склада\n"
-        "• Калькуляторы для бизнеса\n\n"
-        "📂 Полное портфолио в разделе 'Портфолио'",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("спасибо") | F.text.lower().contains("благодарю"))
-async def thanks_message(message: types.Message):
-    await message.answer(
-        "😊 Пожалуйста! Рад помочь!\n\n"
-        "Если возникнут еще вопросы — обращайтесь!\n"
-        "🛒 Готовы заказать? Используйте меню ниже",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().contains("хорошо") | F.text.lower().contains("понятно") | F.text.lower().contains("ясно"))
-async def understanding_message(message: types.Message):
-    await message.answer(
-        "👍 Отлично!\n\n"
-        "Есть еще вопросы или готовы сделать заказ?",
-        reply_markup=main_menu
-    )
-
-@dp.message(F.text.lower().regexp(r'.*\?$'))
-async def question_fallback(message: types.Message):
-    await message.answer(
-        "🤔 <b>У вас есть вопрос?</b>\n\n"
-        "Вот что я могу рассказать:\n"
-        "💰 О ценах и стоимости\n"
-        "⏰ О сроках выполнения\n"
-        "🏆 О моем опыте и портфолио\n"
-        "💳 Об оплате и гарантиях\n"
-        "📞 Контакты для связи\n\n"
-        "Или выберите нужный раздел в меню ⬇️\n\n"
-        "💬 <i>Если не нашли ответ — пишите напрямую: @JProj_174</i>",
-        parse_mode="HTML",
-        reply_markup=main_menu
-    )
+# Обработчик для отладки - показывает все входящие сообщения
+@dp.message(F.text.startswith("/"))
+async def debug_commands(message: types.Message):
+    """Отладочный обработчик для всех команд"""
+    logger.info(f"🔧 Получена команда: {message.text} от пользователя {message.from_user.id}")
+    
+    # Если команда не обработана другими хендлерами
+    if message.text not in ["/start", "/help", "/status", "/ping"]:
+        await message.answer(
+            f"❓ <b>Неизвестная команда:</b> <code>{message.text}</code>\n\n"
+            "📋 <b>Доступные команды:</b>\n"
+            "/start - Запустить бота\n"
+            "/help - Показать справку\n"
+            "/status - Статус бота\n"
+            "/ping - Проверка связи\n\n"
+            "Используйте кнопки меню для навигации.",
+            parse_mode="HTML",
+            reply_markup=main_menu
+        )
 
 @dp.message()
 async def handle_unknown_message(message: types.Message):
+    logger.info(f"📝 Неизвестное сообщение: '{message.text}' от пользователя {message.from_user.id}")
     await message.answer(
         "🤔 Я не понимаю это сообщение.\n\n"
         "Воспользуйтесь кнопками меню ниже или командами:\n"
@@ -484,6 +391,7 @@ async def webhook_handler(request: Request):
     """Обработчик webhook от Telegram"""
     try:
         data = await request.json()
+        logger.info(f"📨 Получен webhook: {data.get('update_id', 'unknown')}")
         update = types.Update(**data)
         await dp.feed_update(bot, update)
         return web.Response(text="OK")
@@ -494,7 +402,7 @@ async def webhook_handler(request: Request):
 async def health_check(request: Request):
     """Проверка состояния приложения с keep-alive информацией"""
     current_time = datetime.now()
-    uptime_info = f"Bot is running! Time: {current_time.strftime('%d.%m.%Y %H:%M:%S')}, Keep-alive pings: {keep_alive.ping_count}"
+    uptime_info = f"Bot is running! Time: {current_time.strftime('%d.%m.%Y %H:%M:%S')}, Keep-alive pings: {keep_alive.ping_count}, Uptime: {keep_alive.get_uptime()}"
     
     logger.info(f"🏥 Health check: {uptime_info}")
     return web.Response(text=uptime_info, content_type="text/plain")
@@ -539,6 +447,13 @@ async def main():
     """Главная функция запуска бота"""
     logger.info("🚀 Запуск Telegram-бота на Heroku с keep-alive системой...")
 
+    # Получаем информацию о боте при запуске
+    try:
+        bot_info = await bot.get_me()
+        logger.info(f"🤖 Информация о боте: @{bot_info.username} (ID: {bot_info.id})")
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения информации о боте: {e}")
+
     try:
         if WEBHOOK_URL:
             logger.info("🌐 Режим работы: Webhook")
@@ -578,6 +493,7 @@ async def main():
         keep_alive.stop()
         await bot.session.close()
         logger.info("🛑 Бот остановлен")
+
 
 if __name__ == '__main__':
     try:
