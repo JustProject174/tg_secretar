@@ -1,7 +1,10 @@
 import os
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher, types
+import aiohttp
+from aiohttp import web
+from aiohttp.web import Request
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import (
     ReplyKeyboardMarkup,
@@ -10,13 +13,10 @@ from aiogram.types import (
     InlineKeyboardButton
 )
 
-
-
 TOKEN = os.getenv('BOT_TOKEN')
 GSHEETS_URL = os.getenv('GSHEETS_URL')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 PORT = int(os.getenv('PORT', 8000))
-
 
 if not TOKEN:
     raise ValueError('BOT_TOKEN не установлен в переменных окружения')
@@ -26,13 +26,11 @@ if not GSHEETS_URL:
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
 
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
@@ -45,8 +43,6 @@ main_menu = ReplyKeyboardMarkup(
     input_field_placeholder="Выберите действие..."
 )
 
-
-
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -54,7 +50,6 @@ async def start(message: types.Message):
         "Выберите действие:",
         reply_markup=main_menu
     )
-
 
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
@@ -68,7 +63,6 @@ async def help_command(message: types.Message):
         reply_markup=main_menu
     )
 
-
 @dp.message(Command("status"))
 async def status_command(message: types.Message):
     await message.answer(
@@ -79,8 +73,6 @@ async def status_command(message: types.Message):
         "🕐 Время работы: 24/7",
         parse_mode="HTML"
     )
-
-
 
 @dp.message(F.text == "📊 Услуги")
 async def show_services(message: types.Message):
@@ -102,7 +94,6 @@ async def show_services(message: types.Message):
         parse_mode="HTML"
     )
 
-
 @dp.message(F.text == "🖥 Портфолио")
 async def show_portfolio(message: types.Message):
     await message.answer(
@@ -117,7 +108,6 @@ async def show_portfolio(message: types.Message):
         "🔍 <i>Примеры работ и отзывы доступны по ссылкам выше.</i>",
         parse_mode="HTML"
     )
-
 
 @dp.message(F.text == "📞 Контакты")
 async def show_contacts(message: types.Message):
@@ -134,7 +124,6 @@ async def show_contacts(message: types.Message):
         "💬 <i>Предпочитаю общение в Telegram для быстрых ответов</i>",
         parse_mode="HTML"
     )
-
 
 @dp.message(F.text == "🛒 Заказать")
 async def start_order(message: types.Message):
@@ -154,7 +143,6 @@ async def start_order(message: types.Message):
         parse_mode="HTML"
     )
 
-
 @dp.callback_query(F.data == "cancel_order")
 async def cancel_order(callback: types.CallbackQuery):
     await callback.message.edit_text(
@@ -164,14 +152,13 @@ async def cancel_order(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-
 @dp.callback_query(F.data.startswith("order_"))
 async def process_order(callback: types.CallbackQuery):
     service_map = {
         "order_parse": ("Парсинг данных", 3000, "📊"),
         "order_excel": ("Автоматизация Excel", 1000, "📋"),
         "order_bot": ("Разработка бота", 8000, "🤖"),
-        "order_consultation": ("Консультация", 1, "💬")
+        "order_consultation": ("Консультация", 0, "💬")
     }
 
     if callback.data not in service_map:
@@ -236,8 +223,8 @@ async def process_order(callback: types.CallbackQuery):
             "⚠️ <b>Временные проблемы с сервером</b>\n\n"
             "Заказ не был сохранен автоматически.\n"
             "Пожалуйста, свяжитесь со мной напрямую:\n\n"
-            "📱 Telegram: @your_username\n"
-            "📧 Email: your@email.com",
+            "📱 Telegram: @JProj_174\n"
+            "📧 Email: Projman174@yandex.ru",
             parse_mode="HTML"
         )
     except Exception as e:
@@ -247,8 +234,8 @@ async def process_order(callback: types.CallbackQuery):
             f"⚠️ <b>Ошибка при оформлении заказа</b>\n\n"
             f"Техническая информация: {str(e)[:100]}...\n\n"
             "Пожалуйста, свяжитесь со мной напрямую:\n"
-            "📱 Telegram: @your_username\n"
-            "📧 Email: your@email.com\n\n"
+            "📱 Telegram: @JProj_174\n"
+            "📧 Email: Projman174@yandex.ru\n\n"
             "Мы обязательно поможем вам!",
             parse_mode="HTML"
         )
@@ -406,7 +393,6 @@ async def examples_question(message: types.Message):
         reply_markup=main_menu
     )
 
-# Дополнительные обработчики
 @dp.message(F.text.lower().contains("спасибо") | F.text.lower().contains("благодарю"))
 async def thanks_message(message: types.Message):
     await message.answer(
@@ -424,7 +410,6 @@ async def understanding_message(message: types.Message):
         reply_markup=main_menu
     )
 
-# Общий обработчик для вопросительных предложений
 @dp.message(F.text.lower().regexp(r'.*\?$'))
 async def question_fallback(message: types.Message):
     await message.answer(
@@ -450,8 +435,6 @@ async def handle_unknown_message(message: types.Message):
         reply_markup=main_menu
     )
 
-
-
 async def webhook_handler(request: Request):
     """Обработчик webhook от Telegram"""
     try:
@@ -463,39 +446,27 @@ async def webhook_handler(request: Request):
         logger.error(f"Ошибка webhook: {e}", exc_info=True)
         return web.Response(status=500, text="Error")
 
-
 async def health_check(request: Request):
     """Проверка состояния приложения"""
     return web.Response(text="Bot is running!", content_type="text/plain")
-
 
 async def setup_webhook():
     """Настройка webhook для Heroku"""
     try:
         webhook_url = f"{WEBHOOK_URL}/webhook"
-
-
         await bot.delete_webhook(drop_pending_updates=True)
-
-
         await bot.set_webhook(webhook_url)
-
         logger.info(f"✅ Webhook установлен: {webhook_url}")
-
         webhook_info = await bot.get_webhook_info()
         logger.info(f"📊 Статус webhook: {webhook_info}")
-
     except Exception as e:
         logger.error(f"❌ Ошибка установки webhook: {e}")
         raise
-
-
 
 @dp.error()
 async def error_handler(event: types.ErrorEvent):
     logger.error(f"Критическая ошибка: {event.exception}", exc_info=True)
 
-    # Если ошибка произошла в callback query
     if hasattr(event, 'update') and event.update.callback_query:
         try:
             await event.update.callback_query.answer(
@@ -505,7 +476,6 @@ async def error_handler(event: types.ErrorEvent):
         except Exception:
             pass
 
-    # Если ошибка произошла в обычном сообщении
     elif hasattr(event, 'update') and event.update.message:
         try:
             await event.update.message.answer(
@@ -516,22 +486,18 @@ async def error_handler(event: types.ErrorEvent):
         except Exception:
             pass
 
-
-
 async def main():
     logger.info("🚀 Запуск Telegram-бота на Heroku...")
 
     try:
         if WEBHOOK_URL:
-        
             logger.info("🌐 Запуск в режиме webhook")
-
             await setup_webhook()
 
             app = web.Application()
             app.router.add_post('/webhook', webhook_handler)
             app.router.add_get('/health', health_check)
-            app.router.add_get('/', health_check)  # Для проверки Heroku
+            app.router.add_get('/', health_check)
 
             runner = web.AppRunner(app)
             await runner.setup()
@@ -543,10 +509,9 @@ async def main():
             logger.info(f"🔗 Health check: {WEBHOOK_URL}/health")
 
             while True:
-                await asyncio.sleep(740)  # Проверяем каждый час
+                await asyncio.sleep(3600)
 
         else:
-            # Режим polling для разработки
             logger.info("🔄 Запуск в режиме polling (разработка)")
             await bot.delete_webhook(drop_pending_updates=True)
             await dp.start_polling(bot, skip_updates=True)
@@ -556,7 +521,6 @@ async def main():
         raise
     finally:
         await bot.session.close()
-
 
 if __name__ == "__main__":
     try:
