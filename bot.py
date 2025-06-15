@@ -13,6 +13,35 @@ import aiohttp
 from aiogram import F
 from aiohttp import web
 from aiohttp.web_request import Request
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "Bot is running",
+        "timestamp": int(time.time()),
+        "service": "Telegram Bot"
+    })
+
+@app.route('/health')
+def health():
+    return jsonify({
+        "status": "healthy",
+        "uptime": time.time(),
+        "bot_active": True
+    })
+
+@app.route('/ping')
+def ping():
+    return "pong"
+
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+# Запуск Flask в отдельном потоке
+flask_thread = threading.Thread(target=run_flask, daemon=True)
+flask_thread.start()
 
 
 TOKEN = os.getenv('BOT_TOKEN')
