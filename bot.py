@@ -544,7 +544,4 @@ async def main():
             await setup_webhook()
 
             # Запуск keep-alive системы в фоне
-            asyncio.create_task(keep_alive.start_keep_alive())
-            logger.info("🔄 Keep-alive система запущена")
-
-            app = web.
+            asyncio.create_task
